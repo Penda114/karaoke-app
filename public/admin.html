@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Karaoké</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #queue-section { max-width: 600px; margin: auto; }
+        #queue-list div { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .queue-name { font-weight: bold; }
+        .delete-btn { background: #ff4d4d; color: white; border: none; padding: 5px 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="queue-section">
+        <h2>File d'attente</h2>
+        <div id="queue-list"></div>
+    </div>
+
+    <script>
+        const queueListEl = document.getElementById('queue-list');
+
+        async function loadQueue() {
+            try {
+                // Les fetchs vers /api/... fonctionnent tel quel sur Vercel
+                const response = await fetch('/api/queue'); 
+                const queueData = await response.json();
+                
+                // Les données d'Upstash sont des strings JSON, il faut les parser
+                const queue = queueData.map(item => JSON.parse(item));
+                renderQueue(queue);
+
+            } catch (e) {
+                queueListEl.innerHTML = "Erreur de chargement de la file.";
+                console.error(e);
+            }
+        }
+
+        function renderQueue(queue) {
+            queueListEl.innerHTML = '';
+            if (queue.length === 0) {
+                queueListEl.innerHTML = "<p>File d'attente vide.</p>";
+                return;
+            }
+            queue.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <span>
+                        <span class="queue-name">${index + 1}. ${item.name}</span><br>
+                        <span>${item.songTitle}</span>
+                    </span>
+                    <button class="delete-btn" data-id="${item.id}">Supprimer</button>
+                `;
+                queueListEl.appendChild(div);
+            });
+
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.onclick = () => deleteFromQueue(btn.dataset.id);
+            });
+        }
+
+        async function deleteFromQueue(id) {
+            if (!confirm("Supprimer cette entrée ?")) return;
+            try {
+                // L'URL est maintenant /api/queue/[id]
+                await fetch(`/api/queue/${id}`, { method: 'DELETE' }); 
+                loadQueue();
+            } catch (e) {
+                alert("Erreur lors de la suppression.");
+            }
+        }
+
+        loadQueue();
+        setInterval(loadQueue, 5000); // Rafraîchit la file
+    </script>
+</body>
+</html>

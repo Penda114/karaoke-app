@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karaoké - Choisis ta chanson</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        #song-list div { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+        #song-list div:hover { background-color: #f0f0f0; }
+        .song-title { font-weight: bold; }
+        .song-artist { color: #555; }
+    </style>
+</head>
+<body>
+    <h1>🎤 Soirée Karaoké</h1>
+    
+    <label for="name">Ton Prénom :</label>
+    <input type="text" id="name" placeholder="Entre ton prénom ici...">
+    
+    <label for="search">Chercher une chanson :</label>
+    <input type="text" id="search" placeholder="Titre ou artiste...">
+    
+    <div id="song-list"></div>
+    <div id="message"></div>
+
+    <script>
+        const nameInput = document.getElementById('name');
+        const searchInput = document.getElementById('search');
+        const songListEl = document.getElementById('song-list');
+        const messageEl = document.getElementById('message');
+        let allSongs = [];
+
+        // Charger les chansons
+        async function loadSongs() {
+            try {
+                const response = await fetch('/api/songs');
+                allSongs = await response.json();
+                renderSongs(allSongs);
+            } catch (e) {
+                songListEl.innerHTML = "Erreur de chargement des chansons.";
+            }
+        }
+
+        // Afficher les chansons (filtrées ou non)
+        function renderSongs(songs) {
+            songListEl.innerHTML = ''; // Vide la liste
+            if (songs.length === 0) {
+                songListEl.innerHTML = "Aucune chanson trouvée.";
+                return;
+            }
+            songs.forEach(song => {
+                const div = document.createElement('div');
+                div.innerHTML = `<span class="song-title">${song.title}</span><br><span class="song-artist">${song.artist}</span>`;
+                div.onclick = () => selectSong(song);
+                songListEl.appendChild(div);
+            });
+        }
+
+        // Filtrer la liste en direct
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase();
+            const filteredSongs = allSongs.filter(song => 
+                song.title.toLowerCase().includes(query) || 
+                song.artist.toLowerCase().includes(query)
+            );
+            renderSongs(filteredSongs);
+        });
+
+        // Sélectionner une chanson
+        async function selectSong(song) {
+            const name = nameInput.value.trim();
+            if (!name) {
+                messageEl.textContent = "⚠️ Merci d'entrer ton prénom d'abord !";
+                messageEl.style.color = 'red';
+                nameInput.focus();
+                return;
+            }
+            
+            if (!confirm(`Confirmer ?\nChanteur: ${name}\nChanson: ${song.title}`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/queue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, songTitle: song.title })
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    messageEl.textContent = `✅ ${result.message} (Chanteur: ${name}, Chanson: ${song.title})`;
+                    messageEl.style.color = 'green';
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (e) {
+                messageEl.textContent = `Erreur: ${e.message}`;
+                messageEl.style.color = 'red';
+            }
+        }
+
+        // Init
+        loadSongs();
+    </script>
+</body>
+</html>
