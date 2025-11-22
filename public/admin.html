@@ -26,11 +26,25 @@
             try {
                 // Les fetchs vers /api/... fonctionnent tel quel sur Vercel
                 const response = await fetch('/api/queue'); 
-                const queueData = await response.json();
-                
-                // Les données d'Upstash sont des strings JSON, il faut les parser
-                const queue = queueData.map(item => JSON.parse(item));
-                renderQueue(queue);
+                // ...
+				const queueData = await response.json();
+				
+				// Les données d'Upstash sont des strings JSON, il faut les parser
+				// On le fait de manière sécurisée pour ignorer les données corrompues
+				const queue = [];
+				for (const item of queueData) {
+					try {
+						// On essaye de parser l'item
+						const parsedItem = JSON.parse(item);
+						queue.push(parsedItem);
+					} catch (parseError) {
+						// Si ça échoue (ancienne donnée), on l'ignore et on continue
+						console.warn("Item de la file ignoré (donnée corrompue) :", item);
+					}
+				}
+				
+				renderQueue(queue);
+				// ...
 
             } catch (e) {
                 queueListEl.innerHTML = "Erreur de chargement de la file.";
