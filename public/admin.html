@@ -29,24 +29,27 @@
 
                 // Transformer la liste brute en liste "UI"
                 // sans planter sur les données corrompues
-                const queueForUi = [];
-                for (const itemString of queueData) {
-                    try {
-                        // Essai de parser
-                        const parsedItem = JSON.parse(itemString);
-                        parsedItem.isRaw = false; // C'est une bonne donnée
-                        queueForUi.push(parsedItem);
-                    } catch (e) {
-                        // Échec du parse. C'est une donnée brute.
-                        queueForUi.push({
-                            name: "⚠️ DONNÉE BRUTE ⚠️",
-                            songTitle: itemString, // On affiche la chaîne brute
-                            id: null,
-                            isRaw: true,
-                            rawValue: itemString // On stocke la valeur brute
-                        });
-                    }
-                }
+                const queueForUi = queueData.map(item => {
+					// si déjà objet → nickel
+					if (typeof item === "object") {
+						return { ...item, isRaw: false };
+					}
+
+					// si string → tenter de parse
+					try {
+						return { ...JSON.parse(item), isRaw: false };
+					} catch {
+						// sinon → donnée brute
+						return {
+							name: "⚠️ DONNÉE BRUTE ⚠️",
+							songTitle: item,
+							id: null,
+							isRaw: true,
+							rawValue: item
+						};
+					}
+				});
+
                 
                 renderQueue(queueForUi); // On envoie la liste "nettoyée"
 
