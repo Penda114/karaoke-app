@@ -24,102 +24,83 @@
 
         async function loadQueue() {
             try {
-                const response = await fetch('/api/queue'); 
-                const queueData = await response.json(); // Ceci est l'array de strings brutes
+                const response = await fetch('/api/queue');
+                const queueData = await response.json();
 
-                // Transformer la liste brute en liste "UI"
-                // sans planter sur les données corrompues
-                const queueForUi = queueData.map(item => {
-					// si déjà objet → nickel
-					if (typeof item === "object") {
-						return { ...item, isRaw: false };
-					}
+                const queueForUi = [];
+                for (const itemString of queueData) {
+                    try {
+                        const parsedItem = JSON.parse(itemString);
+                        parsedItem.isRaw = false;
+                        queueForUi.push(parsedItem);
+                    } catch {
+                        queueForUi.push({
+                            name: "⚠️ DONNÉE BRUTE ⚠️",
+                            songTitle: itemString,
+                            id: itemString,
+                            isRaw: true
+                        });
+                    }
+                }
 
-					// si string → tenter de parse
-					try {
-						return { ...JSON.parse(item), isRaw: false };
-					} catch {
-						// sinon → donnée brute
-						return {
-							name: "⚠️ DONNÉE BRUTE ⚠️",
-							songTitle: item,
-							id: null,
-							isRaw: true,
-							rawValue: item
-						};
-					}
-				});
-
-                
-                renderQueue(queueForUi); // On envoie la liste "nettoyée"
+                renderQueue(queueForUi);
 
             } catch (e) {
-                queueListEl.innerHTML = "Erreur de chargement de la file.";
+                queueListEl.innerHTML = "Erreur de chargement.";
                 console.error(e);
             }
         }
 
         function renderQueue(queue) {
             queueListEl.innerHTML = '';
+
             if (queue.length === 0) {
                 queueListEl.innerHTML = "<p>File d'attente vide.</p>";
                 return;
             }
-            
+
             queue.forEach((item, index) => {
                 const div = document.createElement('div');
-                let deleteButtonHtml = '';
 
-                if (item.isRaw) {
-                    // BOUTON SUPPRIMER pour DONNÉE BRUTE
-                    // On envoie la valeur brute, encodée pour l'URL
-                    const safeValue = encodeURIComponent(item.rawValue);
-                    deleteButtonHtml = `<button class="delete-btn" data-id="${safeValue}">Supprimer</button>`;
-                } else {
-                    // BOUTON SUPPRIMER pour DONNÉE JSON
-                    // On envoie l'ID
-                    deleteButtonHtml = `<button class="delete-btn" data-id="${item.id}">Supprimer</button>`;
-                }
-                
                 div.innerHTML = `
                     <span>
                         <span class="queue-name">${index + 1}. ${item.name}</span><br>
                         <span>${item.songTitle}</span>
                     </span>
-                    ${deleteButtonHtml}
+                    <button class="delete-btn" data-id="${item.id}">Supprimer</button>
                 `;
+
                 queueListEl.appendChild(div);
             });
 
-            // Attacher UN SEUL type d'écouteur
             document.querySelectorAll('.delete-btn').forEach(btn => {
-                // On passe l'ID (qui est soit un nombre, soit une chaîne encodée)
                 btn.onclick = () => deleteFromQueue(btn.dataset.id);
             });
         }
 
         async function deleteFromQueue(id) {
-			if (!confirm("Supprimer cette entrée ?")) return;
+            if (!confirm("Supprimer cette entrée ?")) return;
 
-			const res = await fetch('/api/queue', {
-				method: 'DELETE',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ id })
-			});
+            console.log("Deleting ID:", id);
 
-			const data = await res.json();
+            const res = await fetch('/api/queue', {
+                method: 'DELETE',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id })
+            });
 
-			if (!res.ok) {
-				alert("Erreur : " + data.message);
-				return;
-			}
+            const data = await res.json();
 
-			loadQueue(); // rafraîchir
-		}
+            if (!res.ok) {
+                alert("Erreur : " + data.message);
+                return;
+            }
 
-        // --- Init ---
+            loadQueue();
+        }
+
         loadQueue();
-        setInterval(loadQueue, 5000); // Rafraîchit la file
+        setInterval(loadQueue, 5000);
     </script>
 </body>
 </html>
