@@ -99,16 +99,23 @@
         }
 
         async function deleteFromQueue(id) {
-            if (!confirm("Supprimer cette entrée ?")) return;
-            try {
-                // L'URL est maintenant /api/queue/[id]
-                // L'ID est déjà prêt, qu'il soit numérique ou une chaîne encodée
-                await fetch(`/api/queue/${id}`, { method: 'DELETE' }); 
-                loadQueue(); // Recharger la liste
-            } catch (e) {
-                alert("Erreur lors de la suppression.");
-            }
-        }
+			if (!confirm("Supprimer cette entrée ?")) return;
+
+			const res = await fetch('/api/queue', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id })
+			});
+
+			const data = await res.json();
+
+			if (!res.ok) {
+				alert("Erreur : " + data.message);
+				return;
+			}
+
+			loadQueue(); // rafraîchir
+		}
 
         // --- Init ---
         loadQueue();
