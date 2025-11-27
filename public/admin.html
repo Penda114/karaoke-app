@@ -27,16 +27,9 @@
       if (song == null) return '';
       if (typeof song === 'string') return song;
       if (typeof song === 'object') {
-        // Si structure connue
         if (song.title) return song.title + (song.artist ? ' — ' + song.artist : '');
         if (song.name) return song.name;
-        // sinon stringify de secours (court)
-        try {
-          const s = JSON.stringify(song);
-          return s.length > 120 ? s.slice(0,120) + '…' : s;
-        } catch {
-          return String(song);
-        }
+        try { const s = JSON.stringify(song); return s.length > 120 ? s.slice(0,120) + '…' : s; } catch { return String(song); }
       }
       return String(song);
     }
@@ -46,11 +39,7 @@
       if (typeof name === 'string') return name;
       if (typeof name === 'object') {
         if (name.displayName) return name.displayName;
-        try {
-          return JSON.stringify(name);
-        } catch {
-          return String(name);
-        }
+        try { return JSON.stringify(name);} catch { return String(name); }
       }
       return String(name);
     }
@@ -64,20 +53,15 @@
         }
         const queueData = await response.json();
 
-        // queueData peut être : tableau de strings (anciennes) ou tableau d'objets (nouveau)
         const queueForUi = queueData.map(raw => {
           if (typeof raw === 'string') {
-            // essayer de parser
             try {
               const parsed = JSON.parse(raw);
               return { ...parsed, __raw: raw, isRaw: false };
             } catch {
-              // donnée brute (string)
               return { name: "⚠️ DONNÉE BRUTE ⚠️", songTitle: raw, id: raw, isRaw: true, __raw: raw };
             }
           } else if (typeof raw === 'object' && raw !== null) {
-            // objet déjà parsé par le backend
-            // si backend a mis { raw: true, value: ... } -> traiter
             if (raw.raw === true && raw.value != null) {
               return { name: "⚠️ DONNÉE BRUTE ⚠️", songTitle: raw.value, id: raw.value, isRaw: true, __raw: raw.value };
             }
@@ -121,12 +105,10 @@
         meta.appendChild(songEl);
 
         const actions = document.createElement('div');
-        // create button and attach real id in closure (avoid encoding issues)
         const btn = document.createElement('button');
         btn.className = 'delete-btn';
         btn.type = 'button';
         btn.textContent = 'Supprimer';
-        // id to send: prefer item.id, fallback to raw
         const idToSend = (item.id != null) ? String(item.id) : (item.__raw != null ? String(item.__raw) : null);
         btn.addEventListener('click', () => deleteFromQueue(idToSend));
 
@@ -146,8 +128,6 @@
       }
       if (!confirm("Supprimer cette entrée ?")) return;
 
-      console.log("DELETE id ->", id);
-
       try {
         const res = await fetch('/api/queue', {
           method: 'DELETE',
@@ -156,14 +136,11 @@
         });
 
         const body = await res.json().catch(() => ({}));
-        console.log('DELETE response', res.status, body);
-
         if (!res.ok) {
           alert("Erreur lors de la suppression : " + (body.message || res.status));
           return;
         }
 
-        // recharger la file
         await loadQueue();
       } catch (e) {
         console.error('delete error', e);
@@ -171,7 +148,6 @@
       }
     }
 
-    // init
     loadQueue();
     setInterval(loadQueue, 5000);
   </script>
