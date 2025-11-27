@@ -17,6 +17,7 @@
     .delete-btn { background:#ff4d4d; color:white; border:none; padding:8px 12px; cursor:pointer; border-radius:4px; transition: background 0.2s; }
     .delete-btn:hover { background: #e60000; }
     .empty-queue { color: #777; font-style: italic; }
+    .error { color: red; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -28,24 +29,22 @@
   <script>
     const queueListEl = document.getElementById('queue-list');
 
-    // --- Charge la file d'attente ---
     async function loadQueue() {
       try {
         const response = await fetch('/api/queue');
         if (!response.ok) {
-          queueListEl.innerHTML = `<p class="empty-queue">Erreur lors du chargement (${response.status}).</p>`;
+          queueListEl.innerHTML = `<p class="error">Erreur serveur (${response.status}).</p>`;
           return;
         }
+        
         const queue = await response.json();
         renderQueue(queue);
       } catch (e) {
-        console.error(e);
-        queueListEl.innerHTML = "<p class='empty-queue'>Erreur de chargement (exception).</p>";
+        console.error("Erreur Fetch ou JSON:", e);
+        queueListEl.innerHTML = "<p class='error'>Erreur de chargement (le JSON est peut-être mal formé).</p>";
       }
     }
 
-    // --- Affiche la file d'attente ---
-    // Note : Plus besoin de "formatters", l'API renvoie des données propres.
     function renderQueue(queue) {
       queueListEl.innerHTML = '';
 
@@ -58,10 +57,10 @@
         const row = document.createElement('div');
         row.className = 'row';
 
-        // Gère les données potentiellement corrompues (au cas où)
-        const name = item.name || '(Nom manquant)';
-        const song = item.songTitle || '(Chanson manquante)';
-        const id = item.id; // L'ID est crucial
+        // L'API est censée fournir ces champs propres
+        const name = item.name || '(Nom non reçu)';
+        const song = item.songTitle || '(Chanson non reçue)';
+        const id = item.id;
 
         row.innerHTML = `
           <div class="meta">
@@ -73,12 +72,11 @@
           </div>
         `;
 
-        // Ajoute le listener pour le bouton supprimer
         const btn = row.querySelector('.delete-btn');
         if (id) {
           btn.addEventListener('click', () => deleteFromQueue(id));
         } else {
-          btn.textContent = 'Erreur (ID)';
+          btn.textContent = 'Erreur ID';
           btn.disabled = true;
         }
 
@@ -86,37 +84,28 @@
       });
     }
 
-    // --- Supprime un élément de la file ---
     async function deleteFromQueue(id) {
-      if (!id) {
-        alert("Impossible de supprimer : ID manquant.");
-        return;
-      }
       if (!confirm("Supprimer cette entrée ?")) return;
-
       try {
         const res = await fetch('/api/queue', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: id }) // Envoie l'ID
+          body: JSON.stringify({ id: id })
         });
-
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           alert("Erreur lors de la suppression : " + (body.message || res.status));
           return;
         }
-
-        await loadQueue(); // Recharge la liste
+        await loadQueue();
       } catch (e) {
         console.error('delete error', e);
         alert("Erreur réseau lors de la suppression.");
       }
     }
 
-    // --- Démarrage et polling ---
     loadQueue();
-    setInterval(loadQueue, 5000); // Recharge toutes les 5 secondes
+    setInterval(loadQueue, 5000);
   </script>
 </body>
 </html>
