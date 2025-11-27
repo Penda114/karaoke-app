@@ -6,13 +6,11 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// Fonction utilitaire pour parser le corps de la requête, car Vercel/Node ne le fait pas toujours
-// automatiquement pour les requêtes non-GET.
+// Fonction utilitaire pour parser le corps de la requête (requis pour Vercel/Node)
 async function parseBody(req) {
     if (req.method === 'GET') return {};
     if (req.body) return req.body;
     
-    // Si req.body est vide ou manquant, nous tentons de le lire à partir du flux
     try {
         const bodyBuffer = await new Promise((resolve, reject) => {
             let body = '';
@@ -41,18 +39,19 @@ export default async function handler(req, res) {
       case 'GET':
         return await handleGet(req, res);
       case 'DELETE':
-        return await handleDelete(req, res, body); // body est passé ici
+        return await handleDelete(req, res, body);
       default:
         res.setHeader('Allow', ['GET', 'POST', 'DELETE']);
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
   } catch (err) {
-    console.error('API /api/queue error:', err);
+    console.error('API /api/queue error global:', err);
     return res.status(500).json({ message: 'Server error' });
   }
 }
 
-// Les fonctions POST et DELETE reçoivent maintenant le 'body' parsé
+// Les fonctions POST et GET restent inchangées (elles sont stables)
+
 async function handlePost(req, res, body) {
   const { name, songTitle } = body;
   
@@ -71,51 +70,66 @@ async function handlePost(req, res, body) {
 }
 
 async function handleGet(req, res) {
-  // Lit les chaînes brutes de Redis
   const entryStrings = await redis.lrange('karaoke_queue', 0, -1);
-  
-  // Renvoie les chaînes brutes (le front fera le parsing)
   return res.status(200).json(entryStrings);
 }
 
 /**
  * Gère DELETE /api/queue
- * Supprime une chanson spécifique par son ID.
+ * Supprime une chanson spécifique par son ID, avec débogage détaillé.
  */
 async function handleDelete(req, res, body) {
-  const { id } = body; // L'ID est extrait du body parsé
+  const { id } = body;
+  console.log(`[DELETE] Tentative de suppression. ID reçu: ${id}`); // DEBUG: ID reçu
   
   if (!id) {
+    console.error("[DELETE] Échec: ID manquant dans le corps de la requête.");
     return res.status(400).json({ message: 'ID manquant.' });
   }
 
   // 1. Lire toutes les entrées
   const allEntries = await redis.lrange('karaoke_queue', 0, -1);
+  console.log(`[DELETE] Entrées lues de Redis: ${allEntries.length} éléments.`); // DEBUG: Nombre d'entrées
+  
   let entryToRemove = null;
 
   // 2. Chercher la chaîne JSON exacte qui contient cet ID
   for (const entryString of allEntries) {
     try {
       const parsed = JSON.parse(entryString);
-      // Comparaison en chaîne pour être sûr
-      if (parsed && parsed.id != null && String(parsed.id) === String(id)) {
+      
+      const parsedId = String(parsed.id); 
+      
+      if (parsed && parsed.id != null && parsedId === String(id)) {
         entryToRemove = entryString;
+        console.log(`[DELETE] ✅ Match trouvé pour l'ID ${id}.`); // DEBUG: Match trouvé
+        console.log(`[DELETE] Chaîne complète: ${entryToRemove.substring(0, 80)}...`); 
         break;
       }
+      
+      // Log utile si la liste est très longue et que le match ne se fait pas
+      // console.log(`[DELETE] Vérification: ID dans Redis: ${parsedId}, ID recherché: ${id}`); 
+
     } catch (e) {
       // Ignorer les chaînes non-JSON
+      console.warn(`[DELETE] Ignoré: Chaîne non-JSON trouvée: ${entryString.substring(0, 50)}...`);
     }
   }
 
   // 3. Si on l'a trouvée, la supprimer
   if (!entryToRemove) {
-    // Ce 404 est retourné si l'ID est valide mais que l'entrée n'est pas trouvée dans la liste
+    console.error(`[DELETE] ❌ Échec: Aucune chaîne correspondante trouvée pour l'ID ${id}.`); // DEBUG: Échec
     return res.status(404).json({ message: 'Entrée non trouvée ou déjà supprimée.' });
   }
 
-  // LREM va supprimer 1 seule occurrence de la chaîne exacte
-  await redis.lrem('karaoke_queue', 1, entryToRemove);
+  // Suppression
+  const result = await redis.lrem('karaoke_queue', 1, entryToRemove);
   
-  console.log(`Suppression réussie de l'élément avec ID: ${id}`);
-  return res.status(200).json({ message: 'Entrée supprimée !' });
+  if (result === 1) {
+    console.log(`[DELETE] ✔️ Succès: 1 élément supprimé (ID: ${id}).`); // DEBUG: Succès
+    return res.status(200).json({ message: 'Entrée supprimée !' });
+  } else {
+    console.error(`[DELETE] ⚠️ Attention: Échec LREM. LREM a retourné ${result}.`); // DEBUG: Problème LREM
+    return res.status(404).json({ message: 'Échec de la suppression par Redis (élément disparu?).' });
+  }
 }
