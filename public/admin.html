@@ -29,49 +29,48 @@
   <script>
     const queueListEl = document.getElementById('queue-list');
 
-    // --- Charge et parse la file d'attente ---
+    // --- Charge la file d'attente ---
     async function loadQueue() {
+      console.log("--- Début du chargement de la file d'attente ---");
       try {
         const response = await fetch('/api/queue');
+        
         if (!response.ok) {
+          console.error(`Erreur serveur : ${response.status} ${response.statusText}`);
           queueListEl.innerHTML = `<p class="error">Erreur serveur (${response.status}).</p>`;
           return;
         }
         
-        // L'API renvoie maintenant un tableau de chaînes brutes (ex: ["{\"id\":\"123\", ...}", "[object Object]"])
-        const entryStrings = await response.json();
+        // Puisque l'API GET renvoie désormais un tableau JSON d'objets (ou de chaînes à parser, selon votre dernière version d'index.js)
+        // Nous allons supposer que vous utilisez la version qui renvoie le JSON PARFAIT pour la simplicité.
+        // Si vous utilisez la version qui renvoie des chaînes brutes, l'objet 'queue' sera un tableau de chaînes, et le code de parsing sera celui de la réponse précédente.
         
-        const queue = entryStrings.map((entryString, i) => {
-            try {
-                // Tentative de parsing dans le navigateur
-                const parsed = JSON.parse(entryString);
-                
-                // Si le parsing réussit et que l'objet est valide
-                if (typeof parsed === 'object' && parsed !== null && parsed.id) {
-                    return parsed;
+        const rawData = await response.json();
+        console.log("Données brutes reçues de l'API:", rawData);
+        
+        // --- LOGIQUE DE PARSING (conservée pour la robustesse si l'API envoie des chaînes) ---
+        // S'assurer que chaque élément est un objet parsé (si vous utilisez la version API qui renvoie des chaînes brutes)
+        const queue = rawData.map((item, i) => {
+            if (typeof item === 'string') {
+                try {
+                    return JSON.parse(item);
+                } catch (e) {
+                    console.warn(`Erreur de parsing pour l'élément ${i}. Renvoi d'un objet d'erreur.`);
+                    return { id: `corrupted-data-${i}`, name: '❌ Donnée Corrompue', songTitle: item };
                 }
-                
-                // Si le parsing réussit mais l'objet est incomplet
-                return {
-                    id: `invalid-data-${i}`,
-                    name: 'Donnée Invalide (Objet)',
-                    songTitle: String(entryString).slice(0, 100)
-                };
-
-            } catch (e) {
-                // Si le parsing échoue (ex: la chaîne est "[object Object]")
-                return {
-                    id: `corrupted-data-${i}`,
-                    name: '❌ Donnée Brute Corrompue',
-                    songTitle: String(entryString).slice(0, 100) // Affiche la chaîne corrompue
-                };
             }
-        });
+            return item; // Si c'est déjà un objet
+        }).filter(item => item !== null); // Enlève les nulls
+        
+        console.log("File d'attente parsée pour l'affichage:", queue);
 
         renderQueue(queue);
+
       } catch (e) {
-        console.error("Erreur Fetch ou JSON:", e);
-        queueListEl.innerHTML = "<p class='error'>Erreur de chargement (impossible de lire la réponse du serveur).</p>";
+        console.error("Erreur critique lors du chargement:", e);
+        queueListEl.innerHTML = "<p class='error'>Erreur de chargement (vérifiez la console pour les détails).</p>";
+      } finally {
+        console.log("--- Fin du chargement ---");
       }
     }
 
@@ -85,12 +84,15 @@
       }
 
       queue.forEach((item, idx) => {
+        // Extraction des champs requis, avec des fallbacks robustes
+        const name = item.name ? item.name.trim() : '(Nom manquant)';
+        const song = item.songTitle ? item.songTitle.trim() : '(Chanson manquante)';
+        const id = item.id;
+        
+        console.log(`Rendu de l'élément ${idx + 1}: ID=${id}, Nom=${name}, Chanson=${song}`);
+
         const row = document.createElement('div');
         row.className = 'row';
-
-        const name = item.name || '(Nom non reçu)';
-        const song = item.songTitle || '(Chanson non reçue)';
-        const id = item.id;
 
         row.innerHTML = `
           <div class="meta">
@@ -103,12 +105,12 @@
         `;
 
         const btn = row.querySelector('.delete-btn');
-        if (id && id.indexOf('corrupted-data') === -1) { // Empêche la suppression des entrées d'erreur, ou gérez-la si vous voulez les supprimer par index
+        if (id && id.indexOf('corrupted-data') === -1) {
           btn.addEventListener('click', () => deleteFromQueue(id));
         } else {
-          // Si c'est une entrée corrompue, on désactive la suppression par ID
           btn.textContent = 'Erreur ID';
           btn.disabled = true;
+          console.warn(`Bouton de suppression désactivé pour l'élément ${idx + 1} (ID corrompu ou manquant).`);
         }
 
         queueListEl.appendChild(row);
@@ -117,7 +119,9 @@
 
     // --- Supprime un élément de la file ---
     async function deleteFromQueue(id) {
+      // ... (La fonction deleteFromQueue reste inchangée, elle est robuste) ...
       if (!confirm("Supprimer cette entrée ?")) return;
+      console.log(`Tentative de suppression de l'ID: ${id}`);
       try {
         const res = await fetch('/api/queue', {
           method: 'DELETE',
@@ -126,12 +130,14 @@
         });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
+          console.error("Échec de la suppression:", body);
           alert("Erreur lors de la suppression : " + (body.message || res.status));
           return;
         }
+        console.log(`Suppression réussie de l'ID: ${id}`);
         await loadQueue();
       } catch (e) {
-        console.error('delete error', e);
+        console.error('Erreur réseau de suppression:', e);
         alert("Erreur réseau lors de la suppression.");
       }
     }
