@@ -5,12 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Karaoké - Choisis ta chanson</title>
   <style>
-    body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
-    input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
-    #song-list div { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
-    #song-list div:hover { background-color: #f0f0f0; }
-    .song-title { font-weight: bold; }
-    .song-artist { color: #555; }
+    body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f4f4f9; }
+    h1 { color: #333; }
+    input[type="text"] { width: 100%; padding: 12px; margin-bottom: 15px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    #song-list div { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; background-color: #fff; }
+    #song-list div:hover { background-color: #e9e9f0; }
+    .song-title { font-weight: bold; color: #0056b3; }
+    .song-artist { color: #555; font-size: 0.9em; }
+    #message { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+    #message.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    #message.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
   </style>
 </head>
 <body>
@@ -32,22 +36,24 @@
     const messageEl = document.getElementById('message');
     let allSongs = [];
 
+    // --- Charge les chansons au démarrage ---
     async function loadSongs() {
       try {
         const response = await fetch('/api/songs');
-        if (!response.ok) throw new Error('Erreur serveur songs: ' + response.status);
+        if (!response.ok) throw new Error('Erreur serveur: ' + response.status);
         allSongs = await response.json();
         renderSongs(allSongs);
       } catch (e) {
-        songListEl.innerHTML = "Erreur de chargement des chansons.";
+        songListEl.innerHTML = "<p>Erreur de chargement des chansons.</p>";
         console.error(e);
       }
     }
 
+    // --- Affiche la liste des chansons ---
     function renderSongs(songs) {
       songListEl.innerHTML = '';
       if (!songs || songs.length === 0) {
-        songListEl.innerHTML = "Aucune chanson trouvée.";
+        songListEl.innerHTML = "<p>Aucune chanson trouvée.</p>";
         return;
       }
       songs.forEach(song => {
@@ -57,7 +63,8 @@
         songListEl.appendChild(div);
       });
     }
-
+    
+    // --- Gère le filtre de recherche ---
     searchInput.addEventListener('input', () => {
       const query = searchInput.value.toLowerCase();
       const filteredSongs = allSongs.filter(song =>
@@ -67,40 +74,47 @@
       renderSongs(filteredSongs);
     });
 
+    // --- Affiche un message (erreur ou succès) ---
+    function showMessage(type, text) {
+        messageEl.textContent = text;
+        messageEl.className = type; // 'success' or 'error'
+        messageEl.style.display = 'block';
+    }
+
+    // --- Sélectionne et envoie une chanson à la file d'attente ---
     async function selectSong(song) {
       const name = nameInput.value.trim();
       if (!name) {
-        messageEl.textContent = "⚠️ Merci d'entrer ton prénom d'abord !";
-        messageEl.style.color = 'red';
+        showMessage('error', "⚠️ Merci d'entrer ton prénom d'abord !");
         nameInput.focus();
         return;
       }
 
-      if (!confirm(`Confirmer ?\nChanteur: ${name}\nChanson: ${song.title}`)) return;
+      if (!confirm(`Confirmer ?\nChanteur: ${name}\nChanson: ${song.title} - ${song.artist}`)) return;
 
       try {
         const response = await fetch('/api/queue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name, songTitle: song.title })
+          body: JSON.stringify({ name: name, songTitle: `${song.title} - ${song.artist}` })
         });
 
         const result = await response.json().catch(() => ({}));
 
         if (response.ok) {
-          messageEl.textContent = `✅ ${result.message} (Chanteur: ${name}, Chanson: ${song.title})`;
-          messageEl.style.color = 'green';
+          showMessage('success', `✅ Ajouté ! (Chanteur: ${name}, Chanson: ${song.title})`);
+          searchInput.value = ''; // Vide la recherche
+          renderSongs(allSongs); // Ré-affiche toutes les chansons
         } else {
-          messageEl.textContent = `Erreur: ${result.message || response.status}`;
-          messageEl.style.color = 'red';
+          showMessage('error', `Erreur: ${result.message || response.statusText}`);
         }
       } catch (e) {
-        messageEl.textContent = `Erreur réseau: ${e.message}`;
-        messageEl.style.color = 'red';
+        showMessage('error', `Erreur réseau: ${e.message}`);
         console.error(e);
       }
     }
 
+    // --- Démarrage ---
     loadSongs();
   </script>
 </body>

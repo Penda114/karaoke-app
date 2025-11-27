@@ -5,13 +5,18 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Admin Karaoké</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    #queue-section { max-width: 800px; margin: auto; }
-    .row { display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid #eee; }
+    body { font-family: sans-serif; padding: 20px; background-color: #f9f9f9; }
+    #queue-section { max-width: 800px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    h2 { padding: 20px 20px 0 20px; margin: 0; }
+    #queue-list { padding: 20px; }
+    .row { display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #eee; }
+    .row:last-child { border-bottom: none; }
     .meta { max-width:70%; }
-    .queue-name { font-weight:bold; display:block; }
-    .delete-btn { background:#ff4d4d; color:white; border:none; padding:6px 10px; cursor:pointer; border-radius:4px; }
-    .small { font-size:0.9rem; color:#555; }
+    .queue-name { font-weight:bold; display:block; font-size: 1.1em; color: #333; }
+    .song-title { font-size:0.95rem; color:#555; }
+    .delete-btn { background:#ff4d4d; color:white; border:none; padding:8px 12px; cursor:pointer; border-radius:4px; transition: background 0.2s; }
+    .delete-btn:hover { background: #e60000; }
+    .empty-queue { color: #777; font-style: italic; }
   </style>
 </head>
 <body>
@@ -23,66 +28,29 @@
   <script>
     const queueListEl = document.getElementById('queue-list');
 
-    function formatSongTitle(song) {
-      if (song == null) return '';
-      if (typeof song === 'string') return song;
-      if (typeof song === 'object') {
-        if (song.title) return song.title + (song.artist ? ' — ' + song.artist : '');
-        if (song.name) return song.name;
-        try { const s = JSON.stringify(song); return s.length > 120 ? s.slice(0,120) + '…' : s; } catch { return String(song); }
-      }
-      return String(song);
-    }
-
-    function formatName(name) {
-      if (name == null) return '(sans nom)';
-      if (typeof name === 'string') return name;
-      if (typeof name === 'object') {
-        if (name.displayName) return name.displayName;
-        try { return JSON.stringify(name);} catch { return String(name); }
-      }
-      return String(name);
-    }
-
+    // --- Charge la file d'attente ---
     async function loadQueue() {
       try {
         const response = await fetch('/api/queue');
         if (!response.ok) {
-          queueListEl.innerHTML = "<p>Erreur lors du chargement (" + response.status + ").</p>";
+          queueListEl.innerHTML = `<p class="empty-queue">Erreur lors du chargement (${response.status}).</p>`;
           return;
         }
-        const queueData = await response.json();
-
-        const queueForUi = queueData.map(raw => {
-          if (typeof raw === 'string') {
-            try {
-              const parsed = JSON.parse(raw);
-              return { ...parsed, __raw: raw, isRaw: false };
-            } catch {
-              return { name: "⚠️ DONNÉE BRUTE ⚠️", songTitle: raw, id: raw, isRaw: true, __raw: raw };
-            }
-          } else if (typeof raw === 'object' && raw !== null) {
-            if (raw.raw === true && raw.value != null) {
-              return { name: "⚠️ DONNÉE BRUTE ⚠️", songTitle: raw.value, id: raw.value, isRaw: true, __raw: raw.value };
-            }
-            return { ...raw, isRaw: false, __raw: raw };
-          } else {
-            return { name: "⚠️ DONNÉE INCONNUE ⚠️", songTitle: String(raw), id: String(raw), isRaw: true, __raw: raw };
-          }
-        });
-
-        renderQueue(queueForUi);
+        const queue = await response.json();
+        renderQueue(queue);
       } catch (e) {
         console.error(e);
-        queueListEl.innerHTML = "<p>Erreur de chargement (exception).</p>";
+        queueListEl.innerHTML = "<p class='empty-queue'>Erreur de chargement (exception).</p>";
       }
     }
 
+    // --- Affiche la file d'attente ---
+    // Note : Plus besoin de "formatters", l'API renvoie des données propres.
     function renderQueue(queue) {
       queueListEl.innerHTML = '';
 
       if (!queue || queue.length === 0) {
-        queueListEl.innerHTML = "<p>File d'attente vide.</p>";
+        queueListEl.innerHTML = "<p class='empty-queue'>File d'attente vide.</p>";
         return;
       }
 
@@ -90,40 +58,38 @@
         const row = document.createElement('div');
         row.className = 'row';
 
-        const meta = document.createElement('div');
-        meta.className = 'meta';
+        // Gère les données potentiellement corrompues (au cas où)
+        const name = item.name || '(Nom manquant)';
+        const song = item.songTitle || '(Chanson manquante)';
+        const id = item.id; // L'ID est crucial
 
-        const nameEl = document.createElement('span');
-        nameEl.className = 'queue-name';
-        nameEl.textContent = `${idx + 1}. ${formatName(item.name)}`;
+        row.innerHTML = `
+          <div class="meta">
+            <span class="queue-name">${idx + 1}. ${name}</span>
+            <span class="song-title">${song}</span>
+          </div>
+          <div class="actions">
+            <button type="button" class="delete-btn" data-id="${id}">Supprimer</button>
+          </div>
+        `;
 
-        const songEl = document.createElement('span');
-        songEl.className = 'small';
-        songEl.textContent = formatSongTitle(item.songTitle);
-
-        meta.appendChild(nameEl);
-        meta.appendChild(songEl);
-
-        const actions = document.createElement('div');
-        const btn = document.createElement('button');
-        btn.className = 'delete-btn';
-        btn.type = 'button';
-        btn.textContent = 'Supprimer';
-        const idToSend = (item.id != null) ? String(item.id) : (item.__raw != null ? String(item.__raw) : null);
-        btn.addEventListener('click', () => deleteFromQueue(idToSend));
-
-        actions.appendChild(btn);
-
-        row.appendChild(meta);
-        row.appendChild(actions);
+        // Ajoute le listener pour le bouton supprimer
+        const btn = row.querySelector('.delete-btn');
+        if (id) {
+          btn.addEventListener('click', () => deleteFromQueue(id));
+        } else {
+          btn.textContent = 'Erreur (ID)';
+          btn.disabled = true;
+        }
 
         queueListEl.appendChild(row);
       });
     }
 
+    // --- Supprime un élément de la file ---
     async function deleteFromQueue(id) {
       if (!id) {
-        alert("Impossible de supprimer : id manquant.");
+        alert("Impossible de supprimer : ID manquant.");
         return;
       }
       if (!confirm("Supprimer cette entrée ?")) return;
@@ -132,7 +98,7 @@
         const res = await fetch('/api/queue', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
+          body: JSON.stringify({ id: id }) // Envoie l'ID
         });
 
         const body = await res.json().catch(() => ({}));
@@ -141,15 +107,16 @@
           return;
         }
 
-        await loadQueue();
+        await loadQueue(); // Recharge la liste
       } catch (e) {
         console.error('delete error', e);
         alert("Erreur réseau lors de la suppression.");
       }
     }
 
+    // --- Démarrage et polling ---
     loadQueue();
-    setInterval(loadQueue, 5000);
+    setInterval(loadQueue, 5000); // Recharge toutes les 5 secondes
   </script>
 </body>
 </html>

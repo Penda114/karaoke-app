@@ -1,6 +1,6 @@
+// pages/api/songs.js
 import { Pool } from 'pg';
 
-// Vercel injecte automatiquement les variables d'environnement
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
@@ -10,10 +10,12 @@ const pool = new Pool({
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
+        res.setHeader('Allow', ['GET']);
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 
     try {
+        // Sélectionne et trie les chansons
         const result = await pool.query('SELECT title, artist FROM songs ORDER BY artist, title');
         res.status(200).json(result.rows);
     } catch (error) {
