@@ -54,11 +54,21 @@ export default async function handler(req, res) {
 
 async function handlePost(req, res, body) {
   const { name, songTitle } = body;
-  
+
   if (!name || !songTitle || typeof name !== 'string' || typeof songTitle !== 'string') {
     return res.status(400).json({ message: 'Nom et chanson (en tant que chaînes de caractères) requis.' });
   }
 
+  // ✅ 1. Vérifier la taille actuelle de la file
+  const queueLength = await redis.llen('karaoke_queue');
+
+  if (queueLength >= 20) {
+    return res.status(403).json({ 
+      message: 'La file est pleine (20 chansons maximum).' 
+    });
+  }
+
+  // ✅ 2. Ajouter normalement si la limite n'est pas atteinte
   const entry = {
     id: Date.now().toString(),
     name: name.trim(),
@@ -66,6 +76,7 @@ async function handlePost(req, res, body) {
   };
 
   await redis.rpush('karaoke_queue', JSON.stringify(entry));
+
   return res.status(201).json({ message: 'Ajouté à la file !', entry });
 }
 
