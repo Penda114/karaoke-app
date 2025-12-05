@@ -62,7 +62,7 @@ async function handlePost(req, res, body) {
   // ✅ 1. Vérifier la taille actuelle de la file
   const queueLength = await redis.llen('karaoke_queue');
 
-  if (queueLength >= 20) {
+  if (queueLength >= 35) {
     return res.status(403).json({ 
       message: 'La file est pleine (20 chansons maximum).' 
     });
