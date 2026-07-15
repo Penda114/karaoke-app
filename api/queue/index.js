@@ -1,9 +1,27 @@
 // pages/api/queue/index.js
 import { Redis } from '@upstash/redis';
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+const MAX_QUEUE_SIZE = 35;
+
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+if (!redisUrl || !redisToken) {
+  console.error(
+    '[queue] Variables d\'environnement manquantes : ' +
+      'UPSTASH_REDIS_REST_URL et UPSTASH_REDIS_REST_TOKEN doivent être définies.'
+  );
+}
+
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  url: redisUrl,
+  token: redisToken,
 });
 
 // Fonction utilitaire pour parser le corps de la requête (requis pour Vercel/Node)
@@ -30,8 +48,16 @@ async function parseBody(req) {
 
 
 export default async function handler(req, res) {
+  // Garde-fou : évite un timeout Upstash de ~5s et renvoie un message clair
+  // si la configuration Redis est absente, au lieu d'un 500 générique.
+  if (!redisUrl || !redisToken) {
+    return res.status(503).json({
+      message: 'Redis non configuré : définissez UPSTASH_REDIS_REST_URL et UPSTASH_REDIS_REST_TOKEN.',
+    });
+  }
+
   const body = await parseBody(req);
-  
+
   try {
     switch (req.method) {
       case 'POST':
@@ -46,7 +72,7 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error('API /api/queue error global:', err);
-    return res.status(500).json({ message: 'Server error' });
+    return res.status(500).json({ message: 'Server error', error: err.message });
   }
 }
 
@@ -62,9 +88,9 @@ async function handlePost(req, res, body) {
   // ✅ 1. Vérifier la taille actuelle de la file
   const queueLength = await redis.llen('karaoke_queue');
 
-  if (queueLength >= 35) {
-    return res.status(403).json({ 
-      message: 'La file est pleine (20 chansons maximum).' 
+  if (queueLength >= MAX_QUEUE_SIZE) {
+    return res.status(403).json({
+      message: `La file est pleine (${MAX_QUEUE_SIZE} chansons maximum).`
     });
   }
 

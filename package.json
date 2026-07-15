@@ -2,6 +2,7 @@
   "name": "karaoke-api",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "@upstash/redis": "^1.28.0",
     "pg": "^8.11.3"
