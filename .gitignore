@@ -1,3 +1,5 @@
 node_modules/
 .env
 load_json.py
+output.txt
+id_ssh*
