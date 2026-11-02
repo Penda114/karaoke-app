@@ -19,6 +19,15 @@ if (!redisUrl || !redisToken) {
   );
 }
 
+// Une URL invalide (faute de frappe, guillemets parasites, base supprimée)
+// fait échouer le fetch côté Upstash avec un générique "fetch failed" : on la
+// valide tôt pour renvoyer un diagnostic clair plutôt qu'un 500 opaque.
+const redisUrlLooksValid =
+  typeof redisUrl === 'string' && /^https:\/\/[^\s]+\.[^\s]+/.test(redisUrl.trim());
+if (redisUrl && !redisUrlLooksValid) {
+  console.error('[queue] UPSTASH_REDIS_REST_URL invalide : ' + JSON.stringify(redisUrl));
+}
+
 const redis = new Redis({
   url: redisUrl,
   token: redisToken,
@@ -77,7 +86,7 @@ export function findEntryIndex(allEntries, id) {
  */
 export function createHandler(redis, opts = {}) {
   const isConfigured =
-    opts.isConfigured || (() => Boolean(redisUrl && redisToken));
+    opts.isConfigured || (() => Boolean(redisUrl && redisToken && redisUrlLooksValid));
 
   async function handlePost(req, res, body) {
     const { name, songTitle } = body;
@@ -177,7 +186,13 @@ export function createHandler(redis, opts = {}) {
       }
     } catch (err) {
       console.error('API /api/queue error global:', err);
-      return res.status(500).json({ message: 'Server error', error: err.message });
+      // err.cause contient la vraie raison d'un "fetch failed" (DNS, TLS, etc.)
+      const cause = err && err.cause ? String(err.cause.code || err.cause) : undefined;
+      return res.status(500).json({
+        message: 'Server error',
+        error: err.message,
+        ...(cause ? { cause } : {}),
+      });
     }
   };
 }
